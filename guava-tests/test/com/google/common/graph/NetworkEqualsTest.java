@@ -39,8 +39,7 @@ public final class NetworkEqualsTest {
 
   enum GraphType {
     UNDIRECTED,
-    DIRECTED,
-    HYPER // not yet used because we don't yet have a Hypergraph implementation
+    DIRECTED
   }
 
   private final GraphType graphType;
@@ -92,10 +91,10 @@ public final class NetworkEqualsTest {
   // Node sets are the same, but edge sets differ.
   @Test
   public void equals_edgeSetsDiffer() {
-    graph.addEdge(E12, N1, N2);
+    graph.addEdge(N1, N2, E12);
 
     MutableNetwork<Integer, String> g2 = createGraph(graphType);
-    g2.addEdge(E13, N1, N2);
+    g2.addEdge(N1, N2, E13);
 
     new EqualsTester().addEqualityGroup(graph).addEqualityGroup(g2).testEquals();
   }
@@ -103,10 +102,10 @@ public final class NetworkEqualsTest {
   // Node/edge sets are the same, but node/edge connections differ due to graph type.
   @Test
   public void equals_directedVsUndirected() {
-    graph.addEdge(E12, N1, N2);
+    graph.addEdge(N1, N2, E12);
 
     MutableNetwork<Integer, String> g2 = createGraph(oppositeType(graphType));
-    g2.addEdge(E12, N1, N2);
+    g2.addEdge(N1, N2, E12);
 
     new EqualsTester().addEqualityGroup(graph).addEqualityGroup(g2).testEquals();
   }
@@ -114,10 +113,10 @@ public final class NetworkEqualsTest {
   // Node/edge sets and node/edge connections are the same, but directedness differs.
   @Test
   public void equals_selfLoop_directedVsUndirected() {
-    graph.addEdge(E11, N1, N1);
+    graph.addEdge(N1, N1, E11);
 
     MutableNetwork<Integer, String> g2 = createGraph(oppositeType(graphType));
-    g2.addEdge(E11, N1, N1);
+    g2.addEdge(N1, N1, E11);
 
     new EqualsTester().addEqualityGroup(graph).addEqualityGroup(g2).testEquals();
   }
@@ -125,13 +124,13 @@ public final class NetworkEqualsTest {
   // Node/edge sets are the same, but node/edge connections differ.
   @Test
   public void equals_connectionsDiffer() {
-    graph.addEdge(E12, N1, N2);
-    graph.addEdge(E13, N1, N3);
+    graph.addEdge(N1, N2, E12);
+    graph.addEdge(N1, N3, E13);
 
     MutableNetwork<Integer, String> g2 = createGraph(graphType);
     // connect E13 to N1 and N2, and E12 to N1 and N3 => not equal
-    g2.addEdge(E13, N1, N2);
-    g2.addEdge(E12, N1, N3);
+    g2.addEdge(N1, N2, E13);
+    g2.addEdge(N1, N3, E12);
 
     new EqualsTester().addEqualityGroup(graph).addEqualityGroup(g2).testEquals();
   }
@@ -140,13 +139,13 @@ public final class NetworkEqualsTest {
   // (In this case the graphs are considered equal; the property differences are irrelevant.)
   @Test
   public void equals_propertiesDiffer() {
-    graph.addEdge(E12, N1, N2);
+    graph.addEdge(N1, N2, E12);
 
     MutableNetwork<Integer, String> g2 = NetworkBuilder.from(graph)
         .allowsParallelEdges(!graph.allowsParallelEdges())
         .allowsSelfLoops(!graph.allowsSelfLoops())
         .build();
-    g2.addEdge(E12, N1, N2);
+    g2.addEdge(N1, N2, E12);
 
     new EqualsTester().addEqualityGroup(graph, g2).testEquals();
   }
@@ -160,22 +159,22 @@ public final class NetworkEqualsTest {
     MutableNetwork<Integer, String> g2 = builder.build();
 
     // for ug1, add e12 first, then e12_a
-    g1.addEdge(E12, N1, N2);
-    g1.addEdge(E12_A, N1, N2);
+    g1.addEdge(N1, N2, E12);
+    g1.addEdge(N1, N2, E12_A);
 
     // for ug2, add e12_a first, then e12
-    g2.addEdge(E12_A, N1, N2);
-    g2.addEdge(E12, N1, N2);
+    g2.addEdge(N1, N2, E12_A);
+    g2.addEdge(N1, N2, E12);
 
     new EqualsTester().addEqualityGroup(g1, g2).testEquals();
   }
 
   @Test
   public void equals_edgeDirectionsDiffer() {
-    graph.addEdge(E12, N1, N2);
+    graph.addEdge(N1, N2, E12);
 
     MutableNetwork<Integer, String> g2 = createGraph(graphType);
-    g2.addEdge(E12, N2, N1);
+    g2.addEdge(N2, N1, E12);
 
     switch (graphType) {
       case UNDIRECTED:

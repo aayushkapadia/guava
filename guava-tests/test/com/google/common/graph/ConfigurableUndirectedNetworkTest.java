@@ -17,13 +17,9 @@
 package com.google.common.graph;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableSet;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -42,117 +38,109 @@ public class ConfigurableUndirectedNetworkTest extends ConfigurableSimpleUndirec
   @Test
   public void edges_selfLoop() {
     addEdge(E11, N1, N1);
-    assertThat(graph.edges()).containsExactly(E11);
+    assertThat(network.edges()).containsExactly(E11);
   }
 
   @Test
   public void incidentEdges_selfLoop() {
     addEdge(E11, N1, N1);
-    assertThat(graph.incidentEdges(N1)).containsExactly(E11);
+    assertThat(network.incidentEdges(N1)).containsExactly(E11);
   }
 
   @Test
   public void incidentNodes_selfLoop() {
     addEdge(E11, N1, N1);
-    assertThat(graph.incidentNodes(E11)).containsExactly(N1, N1);
+    assertThat(network.incidentNodes(E11).nodeA()).isEqualTo(N1);
+    assertThat(network.incidentNodes(E11).nodeB()).isEqualTo(N1);
   }
 
   @Test
   public void adjacentNodes_selfLoop() {
     addEdge(E11, N1, N1);
     addEdge(E12, N1, N2);
-    assertThat(graph.adjacentNodes(N1)).containsExactly(N1, N2);
-  }
-
-  @Test
-  public void adjacentEdges_selfLoop() {
-    // An edge is never adjacent to itself
-    addEdge(E11, N1, N1);
-    assertThat(graph.adjacentEdges(E11)).isEmpty();
-    addEdge(E12, N1, N2);
-    assertThat(graph.adjacentEdges(E11)).containsExactly(E12);
+    assertThat(network.adjacentNodes(N1)).containsExactly(N1, N2);
   }
 
   @Test
   public void edgesConnecting_selfLoop() {
     addEdge(E11, N1, N1);
-    assertThat(graph.edgesConnecting(N1, N1)).containsExactly(E11);
+    assertThat(network.edgesConnecting(N1, N1)).containsExactly(E11);
     addEdge(E12, N1, N2);
-    assertThat(graph.edgesConnecting(N1, N2)).containsExactly(E12);
-    assertThat(graph.edgesConnecting(N2, N1)).containsExactly(E12);
-    assertThat(graph.edgesConnecting(N1, N1)).containsExactly(E11);
+    assertThat(network.edgesConnecting(N1, N2)).containsExactly(E12);
+    assertThat(network.edgesConnecting(N2, N1)).containsExactly(E12);
+    assertThat(network.edgesConnecting(N1, N1)).containsExactly(E11);
   }
 
   @Test
   public void inEdges_selfLoop() {
     addEdge(E11, N1, N1);
-    assertThat(graph.inEdges(N1)).containsExactly(E11);
+    assertThat(network.inEdges(N1)).containsExactly(E11);
     addEdge(E12, N1, N2);
-    assertThat(graph.inEdges(N1)).containsExactly(E11, E12);
+    assertThat(network.inEdges(N1)).containsExactly(E11, E12);
   }
 
   @Test
   public void outEdges_selfLoop() {
     addEdge(E11, N1, N1);
-    assertThat(graph.outEdges(N1)).containsExactly(E11);
+    assertThat(network.outEdges(N1)).containsExactly(E11);
     addEdge(E12, N2, N1);
-    assertThat(graph.outEdges(N1)).containsExactly(E11, E12);
+    assertThat(network.outEdges(N1)).containsExactly(E11, E12);
   }
 
   @Test
   public void predecessors_selfLoop() {
     addEdge(E11, N1, N1);
-    assertThat(graph.predecessors(N1)).containsExactly(N1);
+    assertThat(network.predecessors(N1)).containsExactly(N1);
     addEdge(E12, N1, N2);
-    assertThat(graph.predecessors(N1)).containsExactly(N1, N2);
+    assertThat(network.predecessors(N1)).containsExactly(N1, N2);
   }
 
   @Test
   public void successors_selfLoop() {
     addEdge(E11, N1, N1);
-    assertThat(graph.successors(N1)).containsExactly(N1);
+    assertThat(network.successors(N1)).containsExactly(N1);
     addEdge(E12, N2, N1);
-    assertThat(graph.successors(N1)).containsExactly(N1, N2);
+    assertThat(network.successors(N1)).containsExactly(N1, N2);
   }
 
   @Test
   public void degree_selfLoop() {
     addEdge(E11, N1, N1);
-    assertEquals(1, graph.degree(N1));
+    assertThat(network.degree(N1)).isEqualTo(2);
     addEdge(E12, N1, N2);
-    assertEquals(2, graph.degree(N1));
+    assertThat(network.degree(N1)).isEqualTo(3);
   }
 
   @Test
   public void inDegree_selfLoop() {
     addEdge(E11, N1, N1);
-    assertEquals(1, graph.inDegree(N1));
+    assertThat(network.inDegree(N1)).isEqualTo(2);
     addEdge(E12, N1, N2);
-    assertEquals(2, graph.inDegree(N1));
+    assertThat(network.inDegree(N1)).isEqualTo(3);
   }
 
   @Test
   public void outDegree_selfLoop() {
     addEdge(E11, N1, N1);
-    assertEquals(1, graph.outDegree(N1));
+    assertThat(network.outDegree(N1)).isEqualTo(2);
     addEdge(E12, N2, N1);
-    assertEquals(2, graph.outDegree(N1));
+    assertThat(network.outDegree(N1)).isEqualTo(3);
   }
 
   @Override
   @Test
   public void addEdge_selfLoop() {
-    assertTrue(addEdge(E11, N1, N1));
-    assertThat(graph.edges()).contains(E11);
-    assertThat(graph.edgesConnecting(N1, N1)).containsExactly(E11);
+    assertThat(addEdge(E11, N1, N1)).isTrue();
+    assertThat(network.edges()).contains(E11);
+    assertThat(network.edgesConnecting(N1, N1)).containsExactly(E11);
   }
 
   @Test
   public void addEdge_existingSelfLoopEdgeBetweenSameNodes() {
     addEdge(E11, N1, N1);
-    ImmutableSet<String> edges = ImmutableSet.copyOf(graph.edges());
-    assertFalse(addEdge(E11, N1, N1));
-    assertThat(graph.edges()).containsExactlyElementsIn(edges);
+    ImmutableSet<String> edges = ImmutableSet.copyOf(network.edges());
+    assertThat(addEdge(E11, N1, N1)).isFalse();
+    assertThat(network.edges()).containsExactlyElementsIn(edges);
   }
 
   @Test
@@ -194,16 +182,16 @@ public class ConfigurableUndirectedNetworkTest extends ConfigurableSimpleUndirec
   public void removeNode_existingNodeWithSelfLoopEdge() {
     addNode(N1);
     addEdge(E11, N1, N1);
-    assertTrue(graph.removeNode(N1));
-    assertThat(graph.nodes()).isEmpty();
-    assertThat(graph.edges()).doesNotContain(E11);
+    assertThat(network.removeNode(N1)).isTrue();
+    assertThat(network.nodes()).isEmpty();
+    assertThat(network.edges()).doesNotContain(E11);
   }
 
   @Test
   public void removeEdge_existingSelfLoopEdge() {
     addEdge(E11, N1, N1);
-    assertTrue(graph.removeEdge(E11));
-    assertThat(graph.edges()).doesNotContain(E11);
-    assertThat(graph.edgesConnecting(N1, N1)).isEmpty();
+    assertThat(network.removeEdge(E11)).isTrue();
+    assertThat(network.edges()).doesNotContain(E11);
+    assertThat(network.edgesConnecting(N1, N1)).isEmpty();
   }
 }

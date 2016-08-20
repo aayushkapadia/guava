@@ -19,7 +19,9 @@ package com.google.common.graph;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.graph.GraphConstants.DEFAULT_NODE_COUNT;
+import static com.google.common.graph.GraphConstants.EDGE_CONNECTING_NOT_IN_GRAPH;
 import static com.google.common.graph.GraphConstants.NODE_NOT_IN_GRAPH;
+import static com.google.common.graph.Graphs.checkNonNegative;
 
 import java.util.Map;
 import java.util.Set;
@@ -27,8 +29,8 @@ import java.util.TreeMap;
 import javax.annotation.Nullable;
 
 /**
- * Abstract configurable implementation of {@link Graph} that supports the options supplied
- * by {@link GraphBuilder}.
+ * Configurable implementation of {@link Graph} that supports the options supplied by
+ * {@link AbstractGraphBuilder}.
  *
  * <p>This class maintains a map of nodes to {@link GraphConnections}.
  *
@@ -49,46 +51,44 @@ import javax.annotation.Nullable;
  * @author Joshua O'Madadhain
  * @author Omar Darwish
  * @param <N> Node parameter type
+ * @param <V> Value parameter type
  */
-abstract class AbstractConfigurableGraph<N> extends AbstractGraph<N> {
+class ConfigurableGraph<N, V> extends AbstractGraph<N, V> {
   private final boolean isDirected;
   private final boolean allowsSelfLoops;
-  private final ElementOrder<? super N> nodeOrder;
+  private final ElementOrder<N> nodeOrder;
 
-  protected final MapIteratorCache<N, GraphConnections<N>> nodeConnections;
+  protected final MapIteratorCache<N, GraphConnections<N, V>> nodeConnections;
+
+  protected long edgeCount; // must be updated when edges are added or removed
 
   /**
    * Constructs a graph with the properties specified in {@code builder}.
    */
-  AbstractConfigurableGraph(GraphBuilder<? super N> builder) {
+  ConfigurableGraph(AbstractGraphBuilder<? super N> builder) {
     this(
         builder,
-        builder.nodeOrder.<N, GraphConnections<N>>createMap(
-            builder.expectedNodeCount.or(DEFAULT_NODE_COUNT)));
+        builder.nodeOrder.<N, GraphConnections<N, V>>createMap(
+            builder.expectedNodeCount.or(DEFAULT_NODE_COUNT)),
+        0L /* edgeCount */);
   }
 
   /**
    * Constructs a graph with the properties specified in {@code builder}, initialized with
    * the given node map.
    */
-  AbstractConfigurableGraph(GraphBuilder<? super N> builder,
-      Map<N, GraphConnections<N>> nodeConnections) {
+  ConfigurableGraph(AbstractGraphBuilder<? super N> builder,
+      Map<N, GraphConnections<N, V>> nodeConnections, long edgeCount) {
     this.isDirected = builder.directed;
     this.allowsSelfLoops = builder.allowsSelfLoops;
-    this.nodeOrder = builder.nodeOrder;
+    this.nodeOrder = builder.nodeOrder.cast();
     // Prefer the heavier "MapRetrievalCache" for nodes if lookup is expensive.
     this.nodeConnections = (nodeConnections instanceof TreeMap)
-        ? new MapRetrievalCache<N, GraphConnections<N>>(nodeConnections)
-        : new MapIteratorCache<N, GraphConnections<N>>(nodeConnections);
+        ? new MapRetrievalCache<N, GraphConnections<N, V>>(nodeConnections)
+        : new MapIteratorCache<N, GraphConnections<N, V>>(nodeConnections);
+    this.edgeCount = checkNonNegative(edgeCount);
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * <p>The order of iteration for this set is determined by the {@code ElementOrder<N>} provided
-   * to the {@code GraphBuilder} that was used to create this instance.
-   * By default, that order is the order in which the nodes were added to the graph.
-   */
   @Override
   public Set<N> nodes() {
     return nodeConnections.unmodifiableKeySet();
@@ -105,7 +105,7 @@ abstract class AbstractConfigurableGraph<N> extends AbstractGraph<N> {
   }
 
   @Override
-  public ElementOrder<? super N> nodeOrder() {
+  public ElementOrder<N> nodeOrder() {
     return nodeOrder;
   }
 
@@ -124,9 +124,31 @@ abstract class AbstractConfigurableGraph<N> extends AbstractGraph<N> {
     return checkedConnections(node).successors();
   }
 
-  protected final GraphConnections<N> checkedConnections(Object node) {
+  @Override
+  public V edgeValue(Object nodeA, Object nodeB) {
+    V value = edgeValueOrDefault(nodeA, nodeB, null);
+    checkArgument(value != null, EDGE_CONNECTING_NOT_IN_GRAPH, nodeA, nodeB);
+    return value;
+  }
+
+  @Override
+  public V edgeValueOrDefault(Object nodeA, Object nodeB, @Nullable V defaultValue) {
+    V value = checkedConnections(nodeA).value(nodeB);
+    if (value == null) {
+      checkArgument(containsNode(nodeB), NODE_NOT_IN_GRAPH, nodeB);
+      return defaultValue;
+    }
+    return value;
+  }
+
+  @Override
+  protected long edgeCount() {
+    return edgeCount;
+  }
+
+  protected final GraphConnections<N, V> checkedConnections(Object node) {
     checkNotNull(node, "node");
-    GraphConnections<N> connections = nodeConnections.get(node);
+    GraphConnections<N, V> connections = nodeConnections.get(node);
     checkArgument(connections != null, NODE_NOT_IN_GRAPH, node);
     return connections;
   }

@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.graph.GraphConstants.SELF_LOOPS_NOT_ALLOWED;
+import static com.google.common.graph.Graphs.checkNonNegative;
+import static com.google.common.graph.Graphs.checkPositive;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 
@@ -34,14 +36,15 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
  * @author Joshua O'Madadhain
  * @author Omar Darwish
  * @param <N> Node parameter type
+ * @param <V> Value parameter type
  */
-final class ConfigurableMutableGraph<N>
-    extends AbstractConfigurableGraph<N> implements MutableGraph<N> {
+final class ConfigurableMutableGraph<N, V>
+    extends ConfigurableGraph<N, V> implements MutableGraph<N, V> {
 
   /**
    * Constructs a mutable graph with the properties specified in {@code builder}.
    */
-  ConfigurableMutableGraph(GraphBuilder<? super N> builder) {
+  ConfigurableMutableGraph(AbstractGraphBuilder<? super N> builder) {
     super(builder);
   }
 
@@ -64,22 +67,20 @@ final class ConfigurableMutableGraph<N>
    * @throws IllegalStateException if {@code node} is already present
    */
   @CanIgnoreReturnValue
-  private GraphConnections<N> addNodeInternal(N node) {
-    GraphConnections<N> connections = newConnections();
+  private GraphConnections<N, V> addNodeInternal(N node) {
+    GraphConnections<N, V> connections = newConnections();
     checkState(nodeConnections.put(node, connections) == null);
     return connections;
   }
 
   @Override
   @CanIgnoreReturnValue
-  public boolean addEdge(N nodeA, N nodeB) {
+  public V putEdgeValue(N nodeA, N nodeB, V value) {
     checkNotNull(nodeA, "nodeA");
     checkNotNull(nodeB, "nodeB");
+    checkNotNull(value, "value");
 
-    GraphConnections<N> connectionsA = nodeConnections.get(nodeA);
-    if (connectionsA != null && connectionsA.successors().contains(nodeB)) {
-      return false;
-    }
+    GraphConnections<N, V> connectionsA = nodeConnections.get(nodeA);
     boolean isSelfLoop = nodeA.equals(nodeB);
     if (!allowsSelfLoops()) {
       checkArgument(!isSelfLoop, SELF_LOOPS_NOT_ALLOWED, nodeA);
@@ -88,13 +89,16 @@ final class ConfigurableMutableGraph<N>
     if (connectionsA == null) {
       connectionsA = addNodeInternal(nodeA);
     }
-    connectionsA.addSuccessor(nodeB);
-    GraphConnections<N> connectionsB = nodeConnections.get(nodeB);
+    V previousValue = connectionsA.addSuccessor(nodeB, value);
+    GraphConnections<N, V> connectionsB = nodeConnections.get(nodeB);
     if (connectionsB == null) {
       connectionsB = addNodeInternal(nodeB);
     }
-    connectionsB.addPredecessor(nodeA);
-    return true;
+    connectionsB.addPredecessor(nodeA, value);
+    if (previousValue == null) {
+      checkPositive(++edgeCount);
+    }
+    return previousValue;
   }
 
   @Override
@@ -102,48 +106,57 @@ final class ConfigurableMutableGraph<N>
   public boolean removeNode(Object node) {
     checkNotNull(node, "node");
 
-    GraphConnections<N> connections = nodeConnections.get(node);
+    GraphConnections<N, V> connections = nodeConnections.get(node);
     if (connections == null) {
       return false;
     }
 
     if (allowsSelfLoops()) {
-      // Remove any potential self-loop first so we won't get CME while removing incident edges.
-      connections.removeSuccessor(node);
-      connections.removePredecessor(node);
+      // Remove self-loop (if any) first, so we don't get CME while removing incident edges.
+      if (connections.removeSuccessor(node) != null) {
+        connections.removePredecessor(node);
+        --edgeCount;
+      }
     }
+
     for (N successor : connections.successors()) {
       nodeConnections.getWithoutCaching(successor).removePredecessor(node);
+      --edgeCount;
     }
     if (isDirected()) { // In undirected graphs, the successor and predecessor sets are equal.
       for (N predecessor : connections.predecessors()) {
-        nodeConnections.getWithoutCaching(predecessor).removeSuccessor(node);
+        checkState(nodeConnections.getWithoutCaching(predecessor).removeSuccessor(node) != null);
+        --edgeCount;
       }
     }
     nodeConnections.remove(node);
+    checkNonNegative(edgeCount);
     return true;
   }
 
   @Override
   @CanIgnoreReturnValue
-  public boolean removeEdge(Object nodeA, Object nodeB) {
+  public V removeEdge(Object nodeA, Object nodeB) {
     checkNotNull(nodeA, "nodeA");
     checkNotNull(nodeB, "nodeB");
 
-    GraphConnections<N> connectionsA = nodeConnections.get(nodeA);
-    if (connectionsA == null || !connectionsA.successors().contains(nodeB)) {
-      return false;
+    GraphConnections<N, V> connectionsA = nodeConnections.get(nodeA);
+    GraphConnections<N, V> connectionsB = nodeConnections.get(nodeB);
+    if (connectionsA == null || connectionsB == null) {
+      return null;
     }
 
-    GraphConnections<N> connectionsB = nodeConnections.get(nodeB);
-    connectionsA.removeSuccessor(nodeB);
-    connectionsB.removePredecessor(nodeA);
-    return true;
+    V previousValue = connectionsA.removeSuccessor(nodeB);
+    if (previousValue != null) {
+      connectionsB.removePredecessor(nodeA);
+      checkNonNegative(--edgeCount);
+    }
+    return previousValue;
   }
 
-  private GraphConnections<N> newConnections() {
+  private GraphConnections<N, V> newConnections() {
     return isDirected()
-        ? DirectedGraphConnections.<N>of()
-        : UndirectedGraphConnections.<N>of();
+        ? DirectedGraphConnections.<N, V>of()
+        : UndirectedGraphConnections.<N, V>of();
   }
 }

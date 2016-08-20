@@ -24,15 +24,14 @@ import static com.google.common.graph.GraphConstants.EDGE_NOT_IN_GRAPH;
 import static com.google.common.graph.GraphConstants.NODE_NOT_IN_GRAPH;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import javax.annotation.Nullable;
 
 /**
- * Abstract configurable implementation of {@link Network} that supports the options supplied
- * by {@link NetworkBuilder}.
+ * Configurable implementation of {@link Network} that supports the options supplied by
+ * {@link NetworkBuilder}.
  *
  * <p>This class maintains a map of nodes to {@link NetworkConnections}. This class also maintains
  * a map of edges to reference nodes. The reference node is defined to be the edge's source node
@@ -57,12 +56,12 @@ import javax.annotation.Nullable;
  * @param <N> Node parameter type
  * @param <E> Edge parameter type
  */
-abstract class AbstractConfigurableNetwork<N, E> extends AbstractNetwork<N, E> {
+class ConfigurableNetwork<N, E> extends AbstractNetwork<N, E> {
   private final boolean isDirected;
   private final boolean allowsParallelEdges;
   private final boolean allowsSelfLoops;
-  private final ElementOrder<? super N> nodeOrder;
-  private final ElementOrder<? super E> edgeOrder;
+  private final ElementOrder<N> nodeOrder;
+  private final ElementOrder<E> edgeOrder;
 
   protected final MapIteratorCache<N, NetworkConnections<N, E>> nodeConnections;
 
@@ -73,7 +72,7 @@ abstract class AbstractConfigurableNetwork<N, E> extends AbstractNetwork<N, E> {
   /**
    * Constructs a graph with the properties specified in {@code builder}.
    */
-  AbstractConfigurableNetwork(NetworkBuilder<? super N, ? super E> builder) {
+  ConfigurableNetwork(NetworkBuilder<? super N, ? super E> builder) {
     this(
         builder,
         builder.nodeOrder.<N, NetworkConnections<N, E>>createMap(
@@ -86,14 +85,14 @@ abstract class AbstractConfigurableNetwork<N, E> extends AbstractNetwork<N, E> {
    * Constructs a graph with the properties specified in {@code builder}, initialized with
    * the given node and edge maps.
    */
-  AbstractConfigurableNetwork(NetworkBuilder<? super N, ? super E> builder,
+  ConfigurableNetwork(NetworkBuilder<? super N, ? super E> builder,
       Map<N, NetworkConnections<N, E>> nodeConnections,
       Map<E, N> edgeToReferenceNode) {
     this.isDirected = builder.directed;
     this.allowsParallelEdges = builder.allowsParallelEdges;
     this.allowsSelfLoops = builder.allowsSelfLoops;
-    this.nodeOrder = builder.nodeOrder;
-    this.edgeOrder = builder.edgeOrder;
+    this.nodeOrder = builder.nodeOrder.cast();
+    this.edgeOrder = builder.edgeOrder.cast();
     // Prefer the heavier "MapRetrievalCache" for nodes if lookup is expensive. This optimizes
     // methods that access the same node(s) repeatedly, such as Graphs.removeEdgesConnecting().
     this.nodeConnections = (nodeConnections instanceof TreeMap)
@@ -102,25 +101,11 @@ abstract class AbstractConfigurableNetwork<N, E> extends AbstractNetwork<N, E> {
     this.edgeToReferenceNode = new MapIteratorCache<E, N>(edgeToReferenceNode);
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * <p>The order of iteration for this set is determined by the {@code ElementOrder<N>} provided
-   * to the {@code GraphBuilder} that was used to create this instance.
-   * By default, that order is the order in which the nodes were added to the graph.
-   */
   @Override
   public Set<N> nodes() {
     return nodeConnections.unmodifiableKeySet();
   }
 
-  /**
-   * {@inheritDoc}
-   *
-   * <p>The order of iteration for this set is determined by the {@code ElementOrder<E>} provided
-   * to the {@code GraphBuilder} that was used to create this instance.
-   * By default, that order is the order in which the edges were added to the graph.
-   */
   @Override
   public Set<E> edges() {
     return edgeToReferenceNode.unmodifiableKeySet();
@@ -142,12 +127,12 @@ abstract class AbstractConfigurableNetwork<N, E> extends AbstractNetwork<N, E> {
   }
 
   @Override
-  public ElementOrder<? super N> nodeOrder() {
+  public ElementOrder<N> nodeOrder() {
     return nodeOrder;
   }
 
   @Override
-  public ElementOrder<? super E> edgeOrder() {
+  public ElementOrder<E> edgeOrder() {
     return edgeOrder;
   }
 
@@ -166,14 +151,6 @@ abstract class AbstractConfigurableNetwork<N, E> extends AbstractNetwork<N, E> {
   @Override
   public Set<N> adjacentNodes(Object node) {
     return checkedConnections(node).adjacentNodes();
-  }
-
-  @Override
-  public Set<E> adjacentEdges(Object edge) {
-    Endpoints<N> endpoints = incidentNodes(edge);
-    Set<E> endpointsIncidentEdges =
-        Sets.union(incidentEdges(endpoints.nodeA()), incidentEdges(endpoints.nodeB()));
-    return Sets.difference(endpointsIncidentEdges, ImmutableSet.of(edge));
   }
 
   @Override

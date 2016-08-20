@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 The Guava Authors
+ * Copyright (C) 2016 The Guava Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,43 +16,39 @@
 
 package com.google.common.graph;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.graph.GraphConstants.NETWORK_WITH_PARALLEL_EDGE;
 
 import com.google.common.annotations.Beta;
+import com.google.common.base.Function;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.graph.DirectedGraphConnections.Adjacency;
-import java.util.Set;
+import com.google.common.collect.Maps;
 
 /**
- * A {@link Graph} whose relationships are constant. Instances of this class may be obtained
- * with {@link #copyOf(Graph)}.
+ * A {@link Graph} whose elements and structural relationships will never change. Instances of
+ * this class may be obtained with {@link #copyOf(Graph)}.
  *
  * @author James Sexton
- * @author Joshua O'Madadhain
- * @author Omar Darwish
  * @param <N> Node parameter type
+ * @param <V> Value parameter type
  * @since 20.0
  */
 @Beta
-public final class ImmutableGraph<N> extends AbstractConfigurableGraph<N> {
+public class ImmutableGraph<N, V> extends ConfigurableGraph<N, V> {
 
-  private ImmutableGraph(Graph<N> graph) {
-    super(GraphBuilder.from(graph), getNodeConnections(graph));
+  /**
+   * To ensure the immutability contract is maintained, there must be no public constructors.
+   */
+  ImmutableGraph(Graph<N, V> graph) {
+    super(GraphBuilder.from(graph), getNodeConnections(graph), graph.edges().size());
   }
 
   /**
    * Returns an immutable copy of {@code graph}.
    */
-  @SuppressWarnings("unchecked")
-  public static <N> ImmutableGraph<N> copyOf(Graph<N> graph) {
-    // TODO(user): Consider dropping this restriction. Would this do what users expect?
-    checkArgument(!((graph instanceof Network) && ((Network<N, ?>) graph).allowsParallelEdges()),
-        NETWORK_WITH_PARALLEL_EDGE);
+  public static <N, V> ImmutableGraph<N, V> copyOf(Graph<N, V> graph) {
     return (graph instanceof ImmutableGraph)
-        ? (ImmutableGraph<N>) graph
-        : new ImmutableGraph<N>(graph);
+        ? (ImmutableGraph<N, V>) graph
+        : new ImmutableGraph<N, V>(graph);
   }
 
   /**
@@ -61,48 +57,35 @@ public final class ImmutableGraph<N> extends AbstractConfigurableGraph<N> {
    * @deprecated no need to use this
    */
   @Deprecated
-  public static <N> ImmutableGraph<N> copyOf(ImmutableGraph<N> graph) {
+  public static <N, V> ImmutableGraph<N, V> copyOf(ImmutableGraph<N, V> graph) {
     return checkNotNull(graph);
   }
 
-  private static <N> ImmutableMap<N, GraphConnections<N>> getNodeConnections(Graph<N> graph) {
-    // ImmutableMap.Builder maintains the order of the elements as inserted, so the map will
-    // have whatever ordering the graph's nodes do, so ImmutableSortedMap is unnecessary even if the
+  private static <N, V> ImmutableMap<N, GraphConnections<N, V>> getNodeConnections(
+      Graph<N, V> graph) {
+    // ImmutableMap.Builder maintains the order of the elements as inserted, so the map will have
+    // whatever ordering the graph's nodes do, so ImmutableSortedMap is unnecessary even if the
     // input nodes are sorted.
-    ImmutableMap.Builder<N, GraphConnections<N>> nodeConnections = ImmutableMap.builder();
+    ImmutableMap.Builder<N, GraphConnections<N, V>> nodeConnections = ImmutableMap.builder();
     for (N node : graph.nodes()) {
       nodeConnections.put(node, connectionsOf(graph, node));
     }
     return nodeConnections.build();
   }
 
-  private static <N> GraphConnections<N> connectionsOf(Graph<N> graph, N node) {
+  private static <N, V> GraphConnections<N, V> connectionsOf(final Graph<N, V> graph,
+      final N node) {
+    Function<N, V> successorNodeToValueFn = new Function<N, V>() {
+      @Override
+      public V apply(N successorNode) {
+        return graph.edgeValue(node, successorNode);
+      }
+    };
     return graph.isDirected()
-        ? DirectedGraphConnections.ofImmutable(createAdjacencyMap(graph, node),
-            graph.predecessors(node).size(), graph.successors(node).size())
-        : UndirectedGraphConnections.ofImmutable(graph.adjacentNodes(node));
-  }
-
-  private static <N> ImmutableMap<N, Adjacency> createAdjacencyMap(Graph<N> graph, N node) {
-    Set<N> predecessors = graph.predecessors(node);
-    Set<N> successors = graph.successors(node);
-    ImmutableMap.Builder<N, Adjacency> nodeAdjacencies = ImmutableMap.builder();
-    for (N adjacentNode : graph.adjacentNodes(node)) {
-      nodeAdjacencies.put(adjacentNode,
-          getAdjacency(predecessors.contains(adjacentNode), successors.contains(adjacentNode)));
-    }
-    return nodeAdjacencies.build();
-  }
-
-  private static Adjacency getAdjacency(boolean isPredecessor, boolean isSuccesor) {
-    if (isPredecessor && isSuccesor) {
-      return Adjacency.BOTH;
-    } else if (isPredecessor) {
-      return Adjacency.PRED;
-    } else if (isSuccesor) {
-      return Adjacency.SUCC;
-    } else {
-      throw new IllegalStateException();
-    }
+        ? DirectedGraphConnections.ofImmutable(
+            graph.predecessors(node),
+            Maps.asMap(graph.successors(node), successorNodeToValueFn))
+        : UndirectedGraphConnections.ofImmutable(
+            Maps.asMap(graph.adjacentNodes(node), successorNodeToValueFn));
   }
 }

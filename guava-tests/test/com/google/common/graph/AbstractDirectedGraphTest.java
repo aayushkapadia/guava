@@ -17,16 +17,13 @@
 package com.google.common.graph;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 /**
- * Abstract base class for testing implementations of {@link Graph} interface.
+ * Abstract base class for testing implementations of {@link BasicGraph} interface.
  *
- * <p>This class is responsible for testing that a directed implementation of {@link Graph}
+ * <p>This class is responsible for testing that a directed implementation of {@link BasicGraph}
  * is correctly handling directed edges. Implementation-dependent test cases are left to
  * subclasses. Test cases that do not require the graph to be directed are found in superclasses.
  *
@@ -51,17 +48,17 @@ public abstract class AbstractDirectedGraphTest extends AbstractGraphTest {
   @Test
   public void inDegree_oneEdge() {
     addEdge(N1, N2);
-    assertEquals(1, graph.inDegree(N2));
+    assertThat(graph.inDegree(N2)).isEqualTo(1);
     // Edge direction handled correctly
-    assertEquals(0, graph.inDegree(N1));
+    assertThat(graph.inDegree(N1)).isEqualTo(0);
   }
 
   @Test
   public void outDegree_oneEdge() {
     addEdge(N1, N2);
-    assertEquals(1, graph.outDegree(N1));
+    assertThat(graph.outDegree(N1)).isEqualTo(1);
     // Edge direction handled correctly
-    assertEquals(0, graph.outDegree(N2));
+    assertThat(graph.outDegree(N2)).isEqualTo(0);
   }
 
   // Element Mutation
@@ -72,22 +69,27 @@ public abstract class AbstractDirectedGraphTest extends AbstractGraphTest {
     // modifications to proxy methods)
     addNode(N1);
     addNode(N2);
-    assertTrue(addEdge(N1, N2));
+    assertThat(addEdge(N1, N2)).isTrue();
   }
 
   @Test
   public void addEdge_existingEdgeBetweenSameNodes() {
     addEdge(N1, N2);
-    assertFalse(addEdge(N1, N2));
+    assertThat(addEdge(N1, N2)).isFalse();
   }
 
-  @Test
-  public void removeEdge_existingEdge() {
+  public void removeEdge_antiparallelEdges() {
     addEdge(N1, N2);
-    assertThat(graph.successors(N1)).containsExactly(N2);
-    assertThat(graph.predecessors(N2)).containsExactly(N1);
-    assertTrue(graph.removeEdge(N1, N2));
+    addEdge(N2, N1);
+
+    assertThat(graph.removeEdge(N1, N2)).isTrue();
     assertThat(graph.successors(N1)).isEmpty();
-    assertThat(graph.predecessors(N2)).isEmpty();
+    assertThat(graph.predecessors(N1)).containsExactly(N2);
+    assertThat(graph.edges()).hasSize(1);
+
+    assertThat(graph.removeEdge(N2, N1)).isTrue();
+    assertThat(graph.successors(N1)).isEmpty();
+    assertThat(graph.predecessors(N1)).isEmpty();
+    assertThat(graph.edges()).isEmpty();
   }
 }

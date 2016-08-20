@@ -21,25 +21,17 @@ import static com.google.common.graph.GraphConstants.NOT_AVAILABLE_ON_UNDIRECTED
 
 import com.google.common.annotations.Beta;
 import com.google.common.base.Objects;
-import com.google.common.collect.UnmodifiableIterator;
-import java.util.AbstractCollection;
-import java.util.Collection;
-import java.util.NoSuchElementException;
 
 /**
- * An immutable {@link Collection} to represent the two (possibly equal, in the case of a self-loop)
- * endpoints of an edge in a graph.
- *
- * <p>The {@link Endpoints} of a directed edge are an ordered pair of nodes (source and target).
- * The {@link Endpoints} of an undirected edge are an unordered pair of nodes. The nodes can be
- * accessed through the {@link #iterator()}, and in the directed case, will iterate in the order
- * {@link #source()}, {@link #target()}.
+ * An immutable pair representing the two (possibly equal, in the case of a self-loop) endpoints
+ * of an edge in a graph. The {@link Endpoints} of a directed edge are an ordered pair of nodes
+ * (source and target). The {@link Endpoints} of an undirected edge are an unordered pair of nodes.
  *
  * @author James Sexton
  * @since 20.0
  */
 @Beta
-public abstract class Endpoints<N> extends AbstractCollection<N> {
+public abstract class Endpoints<N> {
   private final N nodeA;
   private final N nodeB;
 
@@ -51,8 +43,15 @@ public abstract class Endpoints<N> extends AbstractCollection<N> {
   /**
    * Returns {@link Endpoints} representing the endpoints of an edge in {@code graph}.
    */
-  public static <N> Endpoints<N> of(Graph<?> graph, N nodeA, N nodeB) {
+  public static <N> Endpoints<N> of(Graph<?, ?> graph, N nodeA, N nodeB) {
     return graph.isDirected() ? ofDirected(nodeA, nodeB) : ofUndirected(nodeA, nodeB);
+  }
+
+  /**
+   * Returns {@link Endpoints} representing the endpoints of an edge in {@code network}.
+   */
+  public static <N> Endpoints<N> of(Network<?, ?> network, N nodeA, N nodeB) {
+    return network.isDirected() ? ofDirected(nodeA, nodeB) : ofUndirected(nodeA, nodeB);
   }
 
   /**
@@ -89,69 +88,37 @@ public abstract class Endpoints<N> extends AbstractCollection<N> {
    * If these are the {@link Endpoints} of a directed edge, returns the {@link #source()};
    * otherwise, returns an arbitrary (but consistent) endpoint of the origin edge.
    */
-  final N nodeA() {
+  public final N nodeA() {
     return nodeA;
   }
 
   /**
-   * Returns the node that is adjacent to {@link #nodeA()} via the origin edge.
-   * If these are the {@link Endpoints} of a directed edge, it is equal to the {@link #target()}.
+   * Returns the node {@link #adjacentNode(Object) adjacent} to {@link #nodeA()} along the origin
+   * edge. If these are the {@link Endpoints} of a directed edge, it is equal to {@link #target()}.
    */
-  final N nodeB() {
+  public final N nodeB() {
     return nodeB;
   }
 
   /**
-   * Returns the node that is adjacent to {@code node} via the origin edge.
+   * Returns the node that is adjacent to {@code node} along the origin edge.
    *
-   * @throws IllegalArgumentException if the origin edge is not incident to {@code node}
+   * @throws IllegalArgumentException if this instance does not contain {@code node}, that is, the
+   *     origin edge is not incident to {@code}
    */
   public final N adjacentNode(Object node) {
     checkNotNull(node, "node");
-    if (node.equals(nodeA())) {
-      return nodeB();
-    } else if (node.equals(nodeB())) {
-      return nodeA();
+    if (node.equals(nodeA)) {
+      return nodeB;
+    } else if (node.equals(nodeB)) {
+      return nodeA;
     } else {
       throw new IllegalArgumentException(
           String.format("Endpoints %s does not contain node %s", this, node));
     }
   }
 
-  @Override
-  public final UnmodifiableIterator<N> iterator() {
-    return new UnmodifiableIterator<N>() {
-      private int pos = 0;
-
-      @Override
-      public boolean hasNext() {
-        return pos < 2;
-      }
-
-      @Override
-      public N next() {
-        switch (pos++) {
-          case 0:
-            return nodeA;
-          case 1:
-            return nodeB;
-          default:
-            pos = 2;
-            throw new NoSuchElementException();
-        }
-      }
-    };
-  }
-
-  @Override
-  public final int size() {
-    return 2;
-  }
-
-  @Override
-  public final boolean contains(Object obj) {
-    return nodeA.equals(obj) || nodeB.equals(obj);
-  }
+  abstract boolean isDirected();
 
   /**
    * The {@link Endpoints} of two directed edges are equal if their {@link #source()} and
@@ -162,14 +129,18 @@ public abstract class Endpoints<N> extends AbstractCollection<N> {
   @Override
   public abstract boolean equals(Object obj);
 
+  /**
+   * The hashcode of the {@link Endpoints} of a directed edge is equal to
+   * {@code Objects.hashCode(source(), target())}. The hashcode of the {@link Endpoints}
+   * of an undirected edge is equal to {@code nodeA().hashCode() ^ nodeB().hashCode()}.
+   */
   @Override
   public abstract int hashCode();
 
   /**
-   * The {@link Endpoints} of a directed edge. It is guaranteed that all {@link Endpoints} of
-   * directed edges will be an instance of this class.
+   * The {@link Endpoints} of a directed edge.
    */
-  static final class Directed<N> extends Endpoints<N> {
+  private static final class Directed<N> extends Endpoints<N> {
     private Directed(N source, N target) {
       super(source, target);
     }
@@ -185,15 +156,24 @@ public abstract class Endpoints<N> extends AbstractCollection<N> {
     }
 
     @Override
+    boolean isDirected() {
+      return true;
+    }
+
+    @Override
     public boolean equals(Object obj) {
       if (obj == this) {
         return true;
       }
-      if (!(obj instanceof Directed)) {
+      if (!(obj instanceof Endpoints)) {
         return false;
       }
 
-      Directed<?> other = (Directed<?>) obj;
+      Endpoints<?> other = (Endpoints<?>) obj;
+      if (isDirected() != other.isDirected()) {
+        return false;
+      }
+
       return source().equals(other.source()) && target().equals(other.target());
     }
 
@@ -209,10 +189,9 @@ public abstract class Endpoints<N> extends AbstractCollection<N> {
   }
 
   /**
-   * The {@link Endpoints} of an undirected edge. It is guaranteed that all {@link Endpoints} of
-   * undirected edges will be an instance of this class.
+   * The {@link Endpoints} of an undirected edge.
    */
-  static final class Undirected<N> extends Endpoints<N> {
+  private static final class Undirected<N> extends Endpoints<N> {
     private Undirected(N nodeA, N nodeB) {
       super(nodeA, nodeB);
     }
@@ -228,15 +207,24 @@ public abstract class Endpoints<N> extends AbstractCollection<N> {
     }
 
     @Override
+    boolean isDirected() {
+      return false;
+    }
+
+    @Override
     public boolean equals(Object obj) {
       if (obj == this) {
         return true;
       }
-      if (!(obj instanceof Undirected)) {
+      if (!(obj instanceof Endpoints)) {
         return false;
       }
 
-      Undirected<?> other = (Undirected<?>) obj;
+      Endpoints<?> other = (Endpoints<?>) obj;
+      if (isDirected() != other.isDirected()) {
+        return false;
+      }
+
       // Equivalent to the following simple implementation:
       // boolean condition1 = nodeA().equals(other.nodeA()) && nodeB().equals(other.nodeB());
       // boolean condition2 = nodeA().equals(other.nodeB()) && nodeB().equals(other.nodeA());
@@ -255,6 +243,11 @@ public abstract class Endpoints<N> extends AbstractCollection<N> {
     @Override
     public int hashCode() {
       return nodeA().hashCode() ^ nodeB().hashCode();
+    }
+
+    @Override
+    public String toString() {
+      return String.format("[%s, %s]", nodeA(), nodeB());
     }
   }
 }

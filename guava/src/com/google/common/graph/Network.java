@@ -22,9 +22,12 @@ import javax.annotation.Nullable;
 
 /**
  * A network consisting of a set of nodes of type N and a set of edges of type E.
- * That is, a subtype of {@link Graph} that represents edges as explicit first-class objects.
- * Users that are not interested in edges as first-class objects should use a {@link Graph}
- * instead.
+ * Unlike {@link BasicGraph}, {@link Network} represents edges as explicit first-class objects.
+ * Users that are not interested in edges as first-class objects should use the {@link BasicGraph}
+ * interface instead.
+ *
+ * <p>For convenience, we may use the term 'graph' refer to {@link BasicGraph}s and/or
+ * {@link Network}s.
  *
  * <p>Users that wish to modify a {@code Network} must work with its subinterface,
  * {@code MutableNetwork}.
@@ -103,8 +106,9 @@ import javax.annotation.Nullable;
  *   </ul>
  *   <br>Generally speaking, your design may be more robust if you use immutable nodes/edges and
  * store mutable per-element state in a separate data structure (e.g. an element-to-state map).
- * <li>There are no Node or Edge classes built in.  So you can have a {@code Graph<Integer, String>}
- *     or a {@code Graph<Author,Publication>} or a {@code Graph<Webpage,Link>}.
+ * <li>There are no Node or Edge classes built in.  So you can have a
+ *     {@code Network<Integer, String>} or a {@code Network<Author,Publication>} or a
+ *     {@code Network<Webpage,Link>}.
  * <li>This framework supports multiple mechanisms for storing the topology of a graph, including:
  *   <ul>
  *   <li>the Graph implementation stores the topology (for example, by storing a {@code Map<N, E>}
@@ -153,8 +157,8 @@ import javax.annotation.Nullable;
  *     </ol>
  *     Note that (1) and (2) are generally preferred. (5) is generally a hazardous design choice
  *     and should be avoided, because keeping the internal data structures consistent can be tricky.
- * <li>Prefer extending {@link AbstractGraph} over implementing {@link Graph} directly. This will
- *     ensure that the implementations of {@link #equals(Object)} and
+ * <li>Prefer extending {@link AbstractBasicGraph} over implementing {@link BasicGraph} directly.
+ *     This will ensure that the implementations of {@link #equals(Object)} and
  *     {@link #hashCode()} are mutually consistent, and consistent across
  *     implementations.
  * <li>{@code Multimap}s are not sufficient internal data structures for Graph implementations
@@ -204,18 +208,40 @@ import javax.annotation.Nullable;
  * @since 20.0
  */
 @Beta
-public interface Network<N, E> extends Graph<N> {
+public interface Network<N, E> {
+  //
+  // Network-level accessors
+  //
+
+  /**
+   * Returns all nodes in this graph, in the order specified by {@link #nodeOrder()}.
+   */
+  Set<N> nodes();
+
   /**
    * Returns all edges in this network, in the order specified by {@link #edgeOrder()}.
    */
   Set<E> edges();
 
+  /**
+   * Returns a live view of this network as a {@link Graph}. The resulting {@link Graph} will have
+   * an edge connecting node A to node B iff this {@link Network} has an edge connecting A to B.
+   *
+   * <p>{@link Graph#edgeValue(Object, Object)} will return the set of edges connecting node A to
+   * node B. It will return the empty set if there are no edges connecting A to B.
+   *
+   * <p>If this network {@link #allowsParallelEdges()}, parallel edges will treated as if collapsed
+   * into a single edge. For example, the {@link #degree(Object)} of a node in the {@link Graph}
+   * view may be less than the degree of the same node in this {@link Network}.
+   */
+  Graph<N, Set<E>> asGraph();
+
   //
-  // Graph properties
+  // Network properties
   //
 
   /**
-   * {@inheritDoc}
+   * Returns true if the edges in this graph have a direction associated with them.
    *
    * <p>A directed edge is an {@linkplain #outEdges(Object) outgoing edge} of its
    * {@linkplain Endpoints#source() source}, and an {@linkplain #inEdges(Object) incoming edge}
@@ -224,8 +250,14 @@ public interface Network<N, E> extends Graph<N> {
    * {@linkplain #outEdges(Object) outgoing edge} and {@linkplain #inEdges(Object) incoming edge}
    * of each incident node.
    */
-  @Override
   boolean isDirected();
+
+  /**
+   * Returns true if this graph allows self-loops (edges that connect a node to itself).
+   * Attempting to add a self-loop to a graph that does not allow them will throw an
+   * {@link UnsupportedOperationException}.
+   */
+  boolean allowsSelfLoops();
 
   /**
    * Returns true if this graph allows parallel edges. Attempting to add a parallel edge to a graph
@@ -234,13 +266,44 @@ public interface Network<N, E> extends Graph<N> {
   boolean allowsParallelEdges();
 
   /**
+   * Returns the order of iteration for the elements of {@link #nodes()}.
+   */
+  ElementOrder<N> nodeOrder();
+
+  /**
    * Returns the order of iteration for the elements of {@link #edges()}.
    */
-  ElementOrder<? super E> edgeOrder();
+  ElementOrder<E> edgeOrder();
 
   //
   // Element-level accessors
   //
+
+  /**
+   * Returns the nodes which have an incident edge in common with {@code node} in this graph.
+   *
+   * @throws IllegalArgumentException if {@code node} is not an element of this graph
+   */
+  Set<N> adjacentNodes(Object node);
+
+  /**
+   * Returns all nodes in this graph adjacent to {@code node} which can be reached by traversing
+   * {@code node}'s incoming edges <i>against</i> the direction (if any) of the edge.
+   *
+   * @throws IllegalArgumentException if {@code node} is not an element of this graph
+   */
+  Set<N> predecessors(Object node);
+
+  /**
+   * Returns all nodes in this graph adjacent to {@code node} which can be reached by traversing
+   * {@code node}'s outgoing edges in the direction (if any) of the edge.
+   *
+   * <p>This is <i>not</i> the same as "all nodes reachable from {@code node} by following outgoing
+   * edges" (also known as {@code node}'s transitive closure).
+   *
+   * @throws IllegalArgumentException if {@code node} is not an element of this graph
+   */
+  Set<N> successors(Object node);
 
   /**
    * Returns the edges whose endpoints in this graph include {@code node}.
@@ -248,35 +311,6 @@ public interface Network<N, E> extends Graph<N> {
    * @throws IllegalArgumentException if {@code node} is not an element of this graph
    */
   Set<E> incidentEdges(Object node);
-
-  /**
-   * Returns the nodes which are the endpoints of {@code edge} in this graph as {@link Endpoints}.
-   *
-   * @throws IllegalArgumentException if {@code edge} is not an element of this graph
-   */
-  Endpoints<N> incidentNodes(Object edge);
-
-  /**
-   * Returns the edges which have an {@linkplain #incidentNodes(Object) incident node}
-   * in common with {@code edge} in this graph.
-   *
-   * <p>Whether an edge is considered adjacent to itself is not defined by this interface, but
-   * generally edges are not considered to be self-adjacent.
-   *
-   * @throws IllegalArgumentException if {@code edge} is not an element of this graph
-   */
-  Set<E> adjacentEdges(Object edge);
-
-  /**
-   * Returns the set of edges that connect {@code nodeA} to {@code nodeB}.
-   *
-   * <p>This set is the intersection of {@code outEdges(nodeA)} and {@code inEdges(nodeB)}. If
-   * {@code nodeA} is equal to {@code nodeB}, then it is the set of self-loop edges for that node.
-   *
-   * @throws IllegalArgumentException if {@code nodeA} or {@code nodeB} is not an element
-   *     of this graph
-   */
-  Set<E> edgesConnecting(Object nodeA, Object nodeB);
 
   /**
    * Returns all edges in this graph which can be traversed in the direction (if any) of the edge
@@ -294,50 +328,79 @@ public interface Network<N, E> extends Graph<N> {
    */
   Set<E> outEdges(Object node);
 
-  //
-  // Element-level queries
-  //
-
   /**
-   * {@inheritDoc}
+   * Returns the count of {@code node}'s {@link #incidentEdges(Object) incident edges}, counting
+   * self-loops twice (equivalently, the number of times an edge touches {@code node}).
    *
-   * <p>Equivalent to {@code incidentEdges(node).size()}.
+   * <p>For directed graphs, this is equivalent to {@code inDegree(node) + outDegree(node)}.
+   *
+   * <p>For undirected graphs, this is equivalent to {@code incidentEdges(node).size()} + (number
+   * of self-loops incident to {@code node}).
+   *
+   * <p>If the count is greater than {@code Integer.MAX_VALUE}, returns {@code Integer.MAX_VALUE}.
+   *
+   * @throws IllegalArgumentException if {@code node} is not an element of this graph
    */
-  @Override
   int degree(Object node);
 
   /**
-   * {@inheritDoc}
+   * Returns the count of {@code node}'s {@link #inEdges(Object) incoming edges} in a directed
+   * graph. In an undirected graph, returns the {@link #degree(Object)}.
    *
-   * <p>Equivalent to {@code inEdges(node).size()}.
+   * <p>If the count is greater than {@code Integer.MAX_VALUE}, returns {@code Integer.MAX_VALUE}.
+   *
+   * @throws IllegalArgumentException if {@code node} is not an element of this graph
    */
-  @Override
   int inDegree(Object node);
 
   /**
-   * {@inheritDoc}
+   * Returns the count of {@code node}'s {@link #outEdges(Object) outgoing edges} in a directed
+   * graph. In an undirected graph, returns the {@link #degree(Object)}.
    *
-   * <p>Equivalent to {@code outEdges(node).size()}.
+   * <p>If the count is greater than {@code Integer.MAX_VALUE}, returns {@code Integer.MAX_VALUE}.
+   *
+   * @throws IllegalArgumentException if {@code node} is not an element of this graph
    */
-  @Override
   int outDegree(Object node);
 
   /**
-   * Returns {@code true} iff {@code object} is a {@link Network} that has the same structural
-   * relationships as those in this network.
+   * Returns the nodes which are the endpoints of {@code edge} in this graph as {@link Endpoints}.
+   *
+   * @throws IllegalArgumentException if {@code edge} is not an element of this graph
+   */
+  Endpoints<N> incidentNodes(Object edge);
+
+  /**
+   * Returns the set of edges that connect {@code nodeA} to {@code nodeB}.
+   *
+   * <p>This set is the intersection of {@code outEdges(nodeA)} and {@code inEdges(nodeB)}. If
+   * {@code nodeA} is equal to {@code nodeB}, then it is the set of self-loop edges for that node.
+   *
+   * @throws IllegalArgumentException if {@code nodeA} or {@code nodeB} is not an element
+   *     of this graph
+   */
+  Set<E> edgesConnecting(Object nodeA, Object nodeB);
+
+  //
+  // Network identity
+  //
+
+  /**
+   * Returns {@code true} iff {@code object} is a {@link Network} that has the same elements and the
+   * same structural relationships as those in this network.
    *
    * <p>Thus, two networks A and B are equal if <b>all</b> of the following are true:
    * <ul>
-   * <li>A and B have the same {@link #isDirected() directedness}.
-   * <li>A and B have the same node set.
-   * <li>A and B have the same edge set.
+   * <li>A and B have equal {@link #isDirected() directedness}.
+   * <li>A and B have equal {@link #nodes() node sets}.
+   * <li>A and B have equal {@link #edges() edge sets}.
    * <li>Every edge in A and B connects the same nodes in the same direction (if any).
    * </ul>
    *
-   * <p>Network properties are <b>not</b> respected by this method. For example, two networks may be
-   * considered equal even if one allows parallel edges and the other doesn't. Additionally, the
-   * order in which edges or nodes are added to the network, and the order in which they are
-   * iterated over, are irrelevant.
+   * <p>Network properties besides {@link #isDirected() directedness} do <b>not</b> affect equality.
+   * For example, two networks may be considered equal even if one allows parallel edges and the
+   * other doesn't. Additionally, the order in which nodes or edges are added to the network, and
+   * the order in which they are iterated over, are irrelevant.
    *
    * <p>A reference implementation of this is provided by {@link AbstractNetwork#equals(Object)}.
    */
@@ -346,7 +409,8 @@ public interface Network<N, E> extends Graph<N> {
 
   /**
    * Returns the hash code for this network. The hash code of a network is defined as the hash code
-   * of a map from each of the network's nodes to its outgoing edges.
+   * of a map from each of its {@link #edges() edges} to their {@link #incidentNodes(Object)
+   * incident nodes}.
    *
    * <p>A reference implementation of this is provided by {@link AbstractNetwork#hashCode()}.
    */
